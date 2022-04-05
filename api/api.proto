@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package api;
+option go_package = "github.com/rotationalio/api";
+
+service Raft {
+    rpc AppendEntries(stream AppendEntriesRequest) returns (AppendEntriesReply) {};
+    rpc RequestVote(VoteRequest) returns (VoteReply) {};
+    rpc Submit(SubmitRequest) returns (SubmitReply) {};
+}
+
+message AppendEntriesRequest {
+    string id = 1;              // The uuid of the Raft node sending the request.
+    int32 term = 2;             // The leader’s term.
+    string leaderId = 3;        // So follower can redirect clients.
+    int32 prevLogIndex = 4;     // The index of log entry immediately preceding new ones.
+    int32 prevLogTerm = 5;      // The term of the prevLogIndex entry.
+    repeated Entry entries = 6; // The log entries to store (empty for heartbeat)
+    int32 leaderCommit = 7;     // The leader’s commitIndex.
+    string error = 15;          // For debugging/logging purposes.
+}
+
+message AppendEntriesReply {
+    string id = 1;          // The uuid of the Raft node sending the reply.
+    int32 term = 2;         // The current term number, for the leader to update itself.
+    bool success = 3;       // True if follower contained entry matching prevLogIndex and prevLogTerm.
+    string error = 15;      // For debugging/logging purposes.
+}
+
+message VoteRequest {
+    int32 term = 2;         // The candidate's term.
+    string candidateId = 3; // The candidate requesting a vote.
+    int64 lastLogIndex = 4; // The index of candidate’s last log entry.
+    int32 lastLogTerm = 5;  // The term number of candidate’s last log entry.
+    string error = 15;      // For debugging/logging purposes.
+}
+
+message VoteReply {
+    string id = 1;          // The uuid of the Raft node sending the reply.
+    int32 term = 2;         // The current term number, for candidate to update itself.
+    bool voteGranted = 3;   // True means the candidate received the vote.
+    string error = 15;      // For debugging/logging purposes.
+}
+
+message Entry {
+    int32 Term = 1;
+    int32 Index = 3;
+    bytes Value = 2;
+}
+
+message SubmitRequest {
+    bytes Value = 1;
+}
+
+message SubmitReply {
+    bool Success = 1;
+}
