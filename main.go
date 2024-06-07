@@ -63,12 +63,6 @@ func main() {
 					Aliases: []string{"v"},
 					Usage:   "values to store",
 				},
-				&cli.IntFlag{
-					Name:    "term",
-					Aliases: []string{"t"},
-					Usage:   "current term",
-					Value:   1,
-				},
 			},
 		},
 	}
@@ -93,10 +87,10 @@ func SubmitValues(c *cli.Context) (err error) {
 	}
 
 	//
-	vals := strings.Split(c.String("values"), ",")
-	for _, val := range vals {
-		log.Info().Msg(fmt.Sprintf("appending %v", val))
-		req := &api.SubmitRequest{Value: []byte(val)}
+	values := strings.Split(c.String("values"), ",")
+	for _, value := range values {
+		log.Info().Msg(fmt.Sprintf("appending %v", value))
+		req := &api.SubmitRequest{Value: []byte(value)}
 		var rep *api.SubmitReply
 		if rep, err = client.Submit(context.Background(), req); err != nil {
 			log.Error().Msg(fmt.Sprintf("error sending on stream: %v", err.Error()))

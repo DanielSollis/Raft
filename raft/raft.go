@@ -21,7 +21,7 @@ import (
 type Peer struct {
 	Id      string `json:"id"`
 	Port    int    `json:"port"`
-	Address string
+	Address string `json:"Address"`
 	Client  api.RaftClient
 }
 
@@ -70,7 +70,7 @@ func NewRaftServer(port int, id string) (err error) {
 	if raftNode.quorum, err = raftNode.findQuorum(); err != nil {
 		return err
 	}
-	fmt.Printf("node's quorum: %v\n", raftNode.quorum)
+	fmt.Printf("NewRaftServer: node's quorum: %v\n", raftNode.quorum)
 
 	// Persistent server state
 	raftNode.currentTerm = 0
@@ -102,14 +102,14 @@ func NewRaftServer(port int, id string) (err error) {
 
 	// Start timers
 	go func() {
-		fmt.Println("ServeRaft: running election timer")
-		rand.New(rand.NewSource(int64(port)))
+		fmt.Println("NewRaftServer: running election timer")
+		rand.New(rand.NewSource(int64(port + 3)))
 		raftNode.lastHeartbeat = time.Now()
 		raftNode.runElectionTimer()
 	}()
 
 	// Serve raft node
-	fmt.Printf("serving %v on %v\n", id, raftNode.address)
+	fmt.Printf("NewRaftServer: serving %v on %v\n", id, raftNode.address)
 	go raftNode.commitChannelSender()
 	err = raftNode.Serve(listener)
 	return err
@@ -133,7 +133,6 @@ func (s *RaftServer) findQuorum() (quorum []Peer, err error) {
 				return nil, err
 			}
 			quorum = append(quorum, peer)
-			fmt.Printf("dsaf")
 		}
 	}
 	return quorum, nil
@@ -180,7 +179,6 @@ func (s *RaftServer) commitChannelSender() {
 			entries = s.log[s.lastApplied+1 : s.commitIndex+1]
 			s.lastApplied = int64(s.commitIndex)
 		}
-
 		s.Unlock()
 
 		for i, entry := range entries {

@@ -24,7 +24,9 @@ import (
 //  5. If leaderCommit > commitIndex, set commitIndex =
 //     min(leaderCommit, index of last new entry).
 func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err error) {
+	//fmt.Println("s.locking 1")
 	s.Lock()
+	//defer fmt.Println("s.unlocking 1")
 	defer s.Unlock()
 
 	var req *api.AppendEntriesRequest
@@ -42,7 +44,7 @@ func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err err
 			fmt.Printf("AppendEntries: s.state != follower, reverting to follower")
 			s.becomeFollower(req.Term)
 		}
-		fmt.Printf("received heartbeat from leader at %v\n", time.Now())
+		fmt.Printf("AppendEntries: received heartbeat from %v at %v\n", req.LeaderId, time.Now())
 		s.lastHeartbeat = time.Now()
 
 		if req.PrevLogIndex == -1 || (req.PrevLogIndex < int32(len(s.log)) && req.PrevLogTerm == s.log[req.PrevLogIndex].Term) {
@@ -75,7 +77,7 @@ func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err err
 
 	rep.Term = s.currentTerm
 	stream.SendAndClose(rep)
-	fmt.Printf("current log: %v\n", s.log)
+	fmt.Printf("AppendEntries: current log: %v\n", s.log)
 	return nil
 }
 
@@ -87,7 +89,9 @@ func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err err
 //     least as up-to-date as receiver’s log, grant vote (sections §5.2, §5.4 of the
 //     Raft whitepaper).
 func (s *RaftServer) RequestVote(ctx context.Context, in *api.VoteRequest) (out *api.VoteReply, err error) {
+	//fmt.Println("s.locking 2")
 	s.Lock()
+	//defer fmt.Println("s.unlocking 2")
 	defer s.Unlock()
 	lastLogIndex, lastLogTerm := s.lastLogIndexAndTerm()
 	out = &api.VoteReply{Id: s.id, Term: s.currentTerm}
@@ -132,8 +136,10 @@ func (s *RaftServer) startElection() {
 	var out *api.VoteReply
 	for _, peer := range s.quorum {
 		go func(peer Peer) {
+			//fmt.Println("s.locking 3")
 			s.Lock()
 			savedLastLogIndex, savesLastLogTerm := s.lastLogIndexAndTerm()
+			//fmt.Println("s.unlocking 3")
 			s.Unlock()
 
 			in := &api.VoteRequest{
@@ -149,7 +155,9 @@ func (s *RaftServer) startElection() {
 				return
 			}
 			fmt.Printf("%s\n", out)
+			//fmt.Println("s.locking 4")
 			s.Lock()
+			//fmt.Println("s.unlocking 4")
 			defer s.Unlock()
 
 			if s.state != candidate {
@@ -158,7 +166,7 @@ func (s *RaftServer) startElection() {
 			}
 
 			if out.Term > startingTerm {
-				fmt.Printf("out.Term: %v > startingTerm: %v, reverting to follower\n", out.Term, startingTerm)
+				fmt.Printf("startElection: %v > startingTerm: %v, reverting to follower\n", out.Term, startingTerm)
 				s.becomeFollower(out.Term)
 				return
 			} else if out.Term == startingTerm {
@@ -187,13 +195,15 @@ func (s *RaftServer) lastLogIndexAndTerm() (int64, int32) {
 }
 
 func (s *RaftServer) sendHeartbeat() {
+	//fmt.Println("s.locking 5")
 	s.Lock()
 	if s.state != leader {
 		s.Unlock()
 		return
 	}
 	startingTerm := s.currentTerm
-	fmt.Printf("current log: %v\n", s.log)
+	fmt.Printf("sendHeartbeat: current log: %v\n", s.log)
+	//fmt.Println("s.unlocking 5")
 	s.Unlock()
 
 	var err error
@@ -206,6 +216,7 @@ func (s *RaftServer) sendHeartbeat() {
 		}
 
 		go func(peer Peer) {
+			//fmt.Println("s.locking 6")
 			s.Lock()
 			nextIndex := s.nextIndex[peer.Id]
 			prevLogIndex := nextIndex - 1
@@ -224,6 +235,7 @@ func (s *RaftServer) sendHeartbeat() {
 				Entries:      entries,
 				LeaderCommit: s.commitIndex,
 			}
+			//fmt.Println("s.unlocking 6")
 			s.Unlock()
 
 			stream.Send(in)
@@ -237,11 +249,13 @@ func (s *RaftServer) sendHeartbeat() {
 				}
 			}
 
+			//fmt.Println("s.locking 7")
 			s.Lock()
+			//defer fmt.Println("s.unlocking 7")
 			defer s.Unlock()
 
 			if out.Term > startingTerm {
-				fmt.Printf("Send Heartbeat: out.Term > startingTerm, becoming follower")
+				fmt.Println("sendHeartbeat: out.Term > startingTerm, becoming follower")
 				s.becomeFollower(out.Term)
 				return
 			}
@@ -250,11 +264,13 @@ func (s *RaftServer) sendHeartbeat() {
 				if out.Success {
 					s.nextIndex[peer.Id] = nextIndex + len(entries)
 					s.matchIndex[peer.Id] = nextIndex - 1
-					startingCommitIndex := s.commitIndex
+					//startingCommitIndex := s.commitIndex
 					s.setCommitIndex()
-					if s.commitIndex != startingCommitIndex {
-						s.newCommitReady <- struct{}{}
-					}
+					// if s.commitIndex != startingCommitIndex {
+					// 	fmt.Println("foo")
+					// 	s.newCommitReady <- struct{}{}
+					// 	fmt.Println("bar")
+					// }
 				} else {
 					s.nextIndex[peer.Id] = nextIndex - 1
 				}

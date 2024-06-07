@@ -32,7 +32,7 @@ func (s *RaftServer) becomeFollower(term int32) {
 
 func (s *RaftServer) becomeCandidate() error {
 	if s.state == leader {
-		return errors.New("current state is 'leader', leaders cannot become candidates")
+		return errors.New("becomeCandidate: current state is 'leader', leaders cannot become candidates")
 	} else {
 		s.state = candidate
 	}
@@ -41,7 +41,7 @@ func (s *RaftServer) becomeCandidate() error {
 
 func (s *RaftServer) becomeLeader() {
 	if s.state != candidate {
-		s.errChan <- fmt.Errorf("only candidates can become leaders, current state is '%v'", s.state)
+		s.errChan <- fmt.Errorf("becomeLeader: only candidates can become leaders, current state is '%v'", s.state)
 		return
 	} else {
 		s.state = leader
@@ -52,5 +52,5 @@ func (s *RaftServer) becomeLeader() {
 		s.matchIndex[peer.Id] = -1
 	}
 
-	go s.sendHeartbeatsAsLeader()
+	go s.sendHeartbeats()
 }

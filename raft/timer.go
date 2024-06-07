@@ -27,7 +27,7 @@ func (s *RaftServer) runElectionTimer() {
 	s.Unlock()
 
 	timeout := getElectionTimeout()
-	ticker := NewTicker(200 * time.Millisecond)
+	ticker := NewTicker(100 * time.Millisecond)
 	defer ticker.timeout.Stop()
 
 	for {
@@ -35,13 +35,13 @@ func (s *RaftServer) runElectionTimer() {
 
 		s.Lock()
 		if s.state == leader {
-			fmt.Printf("election timer running while in leader state")
+			fmt.Printf("runElectionTimer: election timer running while in leader state")
 			s.Unlock()
 			return
 		}
 
 		if startingTerm != s.currentTerm {
-			fmt.Printf("term incremented to %v while election timer running, expecting %v\n", s.currentTerm, startingTerm)
+			fmt.Printf("runElectionTimer: term incremented to %v while election timer running, expecting %v\n", s.currentTerm, startingTerm)
 			s.Unlock()
 			return
 		}
@@ -56,8 +56,8 @@ func (s *RaftServer) runElectionTimer() {
 }
 
 func getElectionTimeout() time.Duration {
-	timeout := rand.Intn(3000)
-	randomTimeout := time.Duration(3000+timeout) * time.Millisecond
+	timeout := rand.Intn(1500)
+	randomTimeout := time.Duration(1500+timeout) * time.Millisecond
 	return randomTimeout
 }
 
@@ -65,15 +65,15 @@ func (t *Ticker) Reset(period time.Duration) {
 	t.timeout.Reset(period)
 }
 
-func (s *RaftServer) sendHeartbeatsAsLeader() {
-	heartbeatTimeout := 1000 * time.Millisecond
+func (s *RaftServer) sendHeartbeats() {
+	heartbeatTimeout := 500 * time.Millisecond
 	timer := time.NewTimer(heartbeatTimeout)
 	defer timer.Stop()
 
-	println("Sending heartbeats as leader")
+	println("sendHeartbeats: Sending heartbeats as leader")
 	for {
 		doSend := false
-		fmt.Printf("sending heartbeats at %v\n", time.Now())
+		fmt.Printf("sendHeartbeats: sending heartbeats at %v\n", time.Now())
 		<-timer.C
 		doSend = true
 		timer.Stop()
@@ -82,7 +82,7 @@ func (s *RaftServer) sendHeartbeatsAsLeader() {
 		if doSend {
 			s.Lock()
 			if s.state != leader {
-				println("State no longer leader, stopping heartbeats")
+				println("sendHeartbeats: State no longer leader, stopping heartbeats")
 				s.Unlock()
 				return
 			}
