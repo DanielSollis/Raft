@@ -35,7 +35,7 @@ func (s *RaftServer) runElectionTimer() {
 
 		s.Lock()
 		if s.state == leader {
-			fmt.Printf("runElectionTimer: election timer running while in leader state")
+			fmt.Printf("runElectionTimer: election timer running while in leader state\n")
 			s.Unlock()
 			return
 		}
@@ -57,7 +57,7 @@ func (s *RaftServer) runElectionTimer() {
 
 func getElectionTimeout() time.Duration {
 	timeout := rand.Intn(1500)
-	randomTimeout := time.Duration(1500+timeout) * time.Millisecond
+	randomTimeout := time.Duration(timeout+rand.Intn(1500)) * time.Millisecond
 	return randomTimeout
 }
 

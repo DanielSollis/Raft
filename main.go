@@ -65,13 +65,27 @@ func main() {
 				},
 			},
 		},
+		{
+			Name:     "kill",
+			Usage:    "",
+			Category: "Client",
+			Action:   SubmitValues,
+			Flags: []cli.Flag{
+				&cli.Int64Flag{
+					Name:    "port",
+					Aliases: []string{"p"},
+					Usage:   "port to dial",
+					Value:   9000,
+				},
+			},
+		},
 	}
 	app.Run(os.Args)
 }
 
 func serve(c *cli.Context) (err error) {
 	if err = raft.NewRaftServer(c.Int("port"), c.String("id")); err != nil {
-		return cli.Exit(err, 1)
+		fmt.Println(err)
 	}
 	return nil
 }

@@ -54,5 +54,4 @@ message SubmitRequest {
 
 message SubmitReply {
     bool Success = 1;
-    string leaderId = 2;
 }

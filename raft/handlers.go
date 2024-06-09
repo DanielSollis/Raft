@@ -10,38 +10,30 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Invoked by leader to replicate log entries (section 5.3 of the Raft whitepaper);
-// also used as heartbeat (section 5.2 of the Raft whitepaper).
-//
 // Receiver implementation:
-//  1. Reply false if term < currentTerm (section §5.1 of the Raft whitepaper).
-//  2. Reply false if log doesn’t contain an entry at prevLogIndex
-//     whose term matches prevLogTerm (section §5.3 of the Raft whitepaper).
-//  3. If an existing entry conflicts with a new one (same index
-//     but different terms), delete the existing entry and all that
-//     follow it (section §5.3 of the Raft whitepaper).
+//  1. Reply false if term < currentTerm
+//  2. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
+//  3. If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
 //  4. Append any new entries not already in the log.
-//  5. If leaderCommit > commitIndex, set commitIndex =
-//     min(leaderCommit, index of last new entry).
+//  5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
 func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err error) {
-	//fmt.Println("s.locking 1")
 	s.Lock()
-	//defer fmt.Println("s.unlocking 1")
 	defer s.Unlock()
 
 	var req *api.AppendEntriesRequest
-
 	if req, err = stream.Recv(); err != nil {
 		return err
 	}
 
-	rep := &api.AppendEntriesReply{Id: s.id, Term: s.currentTerm, Success: false}
+	if req.Term > s.currentTerm {
+		fmt.Printf("AppendEntries: received term greater than current term, reverting to follower\n")
+		s.becomeFollower(req.Term)
+	}
 
-	// because there cannot be two leaders at a time, if append entries is called on a leader
-	// we can expect that this was initiated by a client.
+	rep := &api.AppendEntriesReply{Id: s.id, Term: s.currentTerm, Success: false}
 	if req.Term == s.currentTerm {
 		if s.state != follower {
-			fmt.Printf("AppendEntries: s.state != follower, reverting to follower")
+			fmt.Printf("AppendEntries: s.state != follower, reverting to follower\n")
 			s.becomeFollower(req.Term)
 		}
 		fmt.Printf("AppendEntries: received heartbeat from %v at %v\n", req.LeaderId, time.Now())
@@ -49,7 +41,6 @@ func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err err
 
 		if req.PrevLogIndex == -1 || (req.PrevLogIndex < int32(len(s.log)) && req.PrevLogTerm == s.log[req.PrevLogIndex].Term) {
 			rep.Success = true
-
 			insertIndex := req.PrevLogIndex + 1
 			newEntryIndex := 0
 
@@ -70,7 +61,7 @@ func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err err
 				if req.LeaderCommit < int32(len(s.log)-1) {
 					s.commitIndex = req.LeaderCommit
 				}
-				s.newCommitReady <- struct{}{}
+				//s.newCommitReady <- struct{}{}
 			}
 		}
 	}
@@ -81,17 +72,12 @@ func (s *RaftServer) AppendEntries(stream api.Raft_AppendEntriesServer) (err err
 	return nil
 }
 
-// Invoked by candidates to gather votes (§5.2).
-//
 // Receiver implementation:
-//  1. Reply false if term < currentTerm (§5.1).
+//  1. Reply false if term < currentTerm
 //  2. If votedFor is null or candidateId, and candidate’s log is at
-//     least as up-to-date as receiver’s log, grant vote (sections §5.2, §5.4 of the
-//     Raft whitepaper).
+//     least as up-to-date as receiver’s log, grant vote
 func (s *RaftServer) RequestVote(ctx context.Context, in *api.VoteRequest) (out *api.VoteReply, err error) {
-	//fmt.Println("s.locking 2")
 	s.Lock()
-	//defer fmt.Println("s.unlocking 2")
 	defer s.Unlock()
 	lastLogIndex, lastLogTerm := s.lastLogIndexAndTerm()
 	out = &api.VoteReply{Id: s.id, Term: s.currentTerm}
@@ -136,10 +122,8 @@ func (s *RaftServer) startElection() {
 	var out *api.VoteReply
 	for _, peer := range s.quorum {
 		go func(peer Peer) {
-			//fmt.Println("s.locking 3")
 			s.Lock()
 			savedLastLogIndex, savesLastLogTerm := s.lastLogIndexAndTerm()
-			//fmt.Println("s.unlocking 3")
 			s.Unlock()
 
 			in := &api.VoteRequest{
@@ -151,13 +135,12 @@ func (s *RaftServer) startElection() {
 
 			fmt.Printf("requesting vote from %s\n", peer.Id)
 			if out, err = peer.Client.RequestVote(context.Background(), in); err != nil {
-				s.errChan <- err
+				fmt.Println(err)
 				return
 			}
+
 			fmt.Printf("%s\n", out)
-			//fmt.Println("s.locking 4")
 			s.Lock()
-			//fmt.Println("s.unlocking 4")
 			defer s.Unlock()
 
 			if s.state != candidate {
@@ -165,6 +148,9 @@ func (s *RaftServer) startElection() {
 				return
 			}
 
+			if out == nil {
+				return
+			}
 			if out.Term > startingTerm {
 				fmt.Printf("startElection: %v > startingTerm: %v, reverting to follower\n", out.Term, startingTerm)
 				s.becomeFollower(out.Term)
@@ -172,6 +158,7 @@ func (s *RaftServer) startElection() {
 			} else if out.Term == startingTerm {
 				if out.VoteGranted {
 					votesReceived += 1
+					fmt.Printf("startElection: votes received, %v\n", votesReceived)
 					if votesReceived*2 > len(s.quorum)+1 {
 						fmt.Println("startElection: Election successful, becoming leader")
 						s.becomeLeader()
@@ -195,7 +182,6 @@ func (s *RaftServer) lastLogIndexAndTerm() (int64, int32) {
 }
 
 func (s *RaftServer) sendHeartbeat() {
-	//fmt.Println("s.locking 5")
 	s.Lock()
 	if s.state != leader {
 		s.Unlock()
@@ -203,7 +189,6 @@ func (s *RaftServer) sendHeartbeat() {
 	}
 	startingTerm := s.currentTerm
 	fmt.Printf("sendHeartbeat: current log: %v\n", s.log)
-	//fmt.Println("s.unlocking 5")
 	s.Unlock()
 
 	var err error
@@ -211,12 +196,11 @@ func (s *RaftServer) sendHeartbeat() {
 	for _, peer := range s.quorum {
 		var stream api.Raft_AppendEntriesClient
 		if stream, err = peer.Client.AppendEntries(context.TODO()); err != nil {
-			s.errChan <- err
-			return
+			fmt.Println(err)
+			continue
 		}
 
 		go func(peer Peer) {
-			//fmt.Println("s.locking 6")
 			s.Lock()
 			nextIndex := s.nextIndex[peer.Id]
 			prevLogIndex := nextIndex - 1
@@ -235,7 +219,6 @@ func (s *RaftServer) sendHeartbeat() {
 				Entries:      entries,
 				LeaderCommit: s.commitIndex,
 			}
-			//fmt.Println("s.unlocking 6")
 			s.Unlock()
 
 			stream.Send(in)
@@ -244,14 +227,12 @@ func (s *RaftServer) sendHeartbeat() {
 					s.errChan <- err
 					return
 				} else {
-					log.Error().Msg("EOF")
+					log.Error().Msg("sendHeartbeat: EOF")
 					return
 				}
 			}
 
-			//fmt.Println("s.locking 7")
 			s.Lock()
-			//defer fmt.Println("s.unlocking 7")
 			defer s.Unlock()
 
 			if out.Term > startingTerm {

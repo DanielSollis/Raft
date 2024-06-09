@@ -103,7 +103,7 @@ func NewRaftServer(port int, id string) (err error) {
 	// Start timers
 	go func() {
 		fmt.Println("NewRaftServer: running election timer")
-		rand.New(rand.NewSource(int64(port + 3)))
+		rand.New(rand.NewSource(int64(port) + 6))
 		raftNode.lastHeartbeat = time.Now()
 		raftNode.runElectionTimer()
 	}()
